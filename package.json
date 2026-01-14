@@ -1,0 +1,17 @@
+{
+  "name": "granola-skill",
+  "version": "0.1.0",
+  "description": "Granola meeting notes CLI for Claude Code",
+  "type": "module",
+  "bin": {
+    "granola": "./bin/granola.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

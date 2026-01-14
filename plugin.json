@@ -1,0 +1,10 @@
+{
+  "name": "granola-skill",
+  "version": "0.1.0",
+  "description": "Access your Granola meeting notes, transcripts, and summaries directly from Claude Code",
+  "author": {
+    "name": "The Focus AI"
+  },
+  "keywords": ["granola", "meetings", "notes", "transcripts", "ai"],
+  "skills": "./skills"
+}
