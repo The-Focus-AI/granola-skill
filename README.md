@@ -11,6 +11,20 @@ A Claude Code plugin for accessing Granola meeting notes, transcripts, and summa
 
 ## Installation
 
+### Via Focus Marketplace (Recommended)
+
+```bash
+# Add the Focus marketplace (if not already added)
+/plugin marketplace add The-Focus-AI/claude-marketplace
+
+# Install the plugin
+/plugin install granola-skill@focus-marketplace
+```
+
+Then restart Claude Code.
+
+### Manual Installation
+
 ```bash
 # Clone the repo
 git clone https://github.com/The-Focus-AI/granola-skill.git
