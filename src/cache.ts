@@ -5,7 +5,7 @@ import { join } from "path";
 // Cache file location
 const CACHE_PATH = join(
   homedir(),
-  "Library/Application Support/Granola/cache-v3.json"
+  "Library/Application Support/Granola/cache-v4.json"
 );
 
 export interface Person {
