@@ -8,6 +8,18 @@ const CACHE_PATH = join(
   "Library/Application Support/Granola/cache-v4.json"
 );
 
+// Decode HTML entities in strings from the cache
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/");
+}
+
 export interface Person {
   name?: string;
   email?: string;
@@ -17,10 +29,18 @@ export interface Person {
   };
 }
 
+export interface Conferencing {
+  type?: string | null;
+  title?: string;
+  url?: string | null;
+}
+
 export interface People {
   title?: string;
   creator?: Person;
   attendees?: Person[];
+  conferencing?: Conferencing;
+  url?: string | null;
 }
 
 export interface TranscriptSegment {
@@ -45,6 +65,10 @@ export interface Document {
   people?: People;
   status?: string;
   type?: string;
+  creation_source?: string;
+  valid_meeting?: boolean | null;
+  visibility?: string | null;
+  deleted_at?: string | null;
   google_calendar_event?: {
     summary?: string;
     start?: { dateTime?: string };
@@ -52,10 +76,21 @@ export interface Document {
   };
 }
 
+export interface DocumentListMetadata {
+  id: string;
+  title: string;
+  description?: string | null;
+  icon?: { type?: string; color?: string; value?: string };
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+}
+
 interface CacheState {
   documents: Record<string, Document>;
   transcripts: Record<string, TranscriptSegment[]>;
-  documentPanels: Record<string, Record<string, unknown>>;
+  documentLists?: Record<string, string[]>;
+  documentListsMetadata?: Record<string, DocumentListMetadata>;
 }
 
 interface CacheData {
@@ -88,7 +123,9 @@ export class GranolaCache {
 
   getDocuments(): Document[] {
     if (!this.data?.state?.documents) return [];
-    return Object.values(this.data.state.documents);
+    return Object.values(this.data.state.documents).filter(
+      (doc) => !doc.deleted_at
+    );
   }
 
   getDocument(id: string): Document | undefined {
@@ -104,14 +141,42 @@ export class GranolaCache {
     return this.getDocuments().filter((doc) => {
       const title = doc.title?.toLowerCase() || "";
       const notes = doc.notes_plain?.toLowerCase() || "";
+      const summary = doc.summary?.toLowerCase() || "";
+      const overview = doc.overview?.toLowerCase() || "";
       const attendees =
         doc.people?.attendees
           ?.map((a) => a.details?.person?.name?.fullName || a.email || "")
           .join(" ")
           .toLowerCase() || "";
 
-      return title.includes(q) || notes.includes(q) || attendees.includes(q);
+      return (
+        title.includes(q) ||
+        notes.includes(q) ||
+        summary.includes(q) ||
+        overview.includes(q) ||
+        attendees.includes(q)
+      );
     });
+  }
+
+  getFolders(): { metadata: DocumentListMetadata; documentIds: string[] }[] {
+    const lists = this.data?.state?.documentLists || {};
+    const meta = this.data?.state?.documentListsMetadata || {};
+
+    return Object.entries(meta)
+      .filter(([, m]) => !m.deleted_at)
+      .map(([id, m]) => ({
+        metadata: m,
+        documentIds: lists[id] || [],
+      }));
+  }
+
+  getFolderDocuments(folderId: string): Document[] {
+    const lists = this.data?.state?.documentLists || {};
+    const docIds = lists[folderId] || [];
+    return docIds
+      .map((id) => this.getDocument(id))
+      .filter((d): d is Document => d !== undefined);
   }
 
   getRecentDocuments(days: number = 7): Document[] {
@@ -127,11 +192,18 @@ export class GranolaCache {
   }
 }
 
+// Get display title, handling null/empty titles and HTML entities
+export function getDisplayTitle(doc: Document): string {
+  const raw = doc.title || "Untitled Meeting";
+  return decodeHtmlEntities(raw);
+}
+
 // Helper to format a document for display
 export function formatDocument(doc: Document, includeNotes = false): string {
   const lines: string[] = [];
+  const title = getDisplayTitle(doc);
 
-  lines.push(`# ${doc.title}`);
+  lines.push(`# ${title}`);
   lines.push("");
   lines.push(`**ID:** ${doc.id}`);
   lines.push(`**Date:** ${new Date(doc.created_at).toLocaleString()}`);
@@ -144,12 +216,38 @@ export function formatDocument(doc: Document, includeNotes = false): string {
     if (attendees.length > 0) {
       lines.push(`**Participants:** ${attendees.join(", ")}`);
     }
+
+    if (doc.people.conferencing?.type) {
+      const conf = doc.people.conferencing;
+      const confStr = conf.url
+        ? `${conf.type} ([link](${conf.url}))`
+        : conf.type;
+      lines.push(`**Conferencing:** ${confStr}`);
+    }
+  }
+
+  if (doc.google_calendar_event?.start?.dateTime) {
+    const start = new Date(
+      doc.google_calendar_event.start.dateTime
+    ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const end = doc.google_calendar_event.end?.dateTime
+      ? new Date(
+          doc.google_calendar_event.end.dateTime
+        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "";
+    lines.push(`**Scheduled:** ${start}${end ? ` - ${end}` : ""}`);
   }
 
   if (doc.summary) {
     lines.push("");
     lines.push("## Summary");
     lines.push(doc.summary);
+  }
+
+  if (doc.overview) {
+    lines.push("");
+    lines.push("## Overview");
+    lines.push(doc.overview);
   }
 
   if (includeNotes && doc.notes_markdown) {

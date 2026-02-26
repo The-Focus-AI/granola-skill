@@ -4,6 +4,7 @@ import {
   GranolaCache,
   formatDocument,
   formatTranscript,
+  getDisplayTitle,
   Document,
 } from "./cache.js";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
@@ -13,22 +14,27 @@ const USAGE = `
 granola - Access your Granola meeting notes
 
 COMMANDS:
-  list [--days N]           List recent meetings (default: 7 days)
+  list [--days N] [--all]   List recent meetings (default: 7 days)
   show <id> [--transcript]  Show meeting details
   search <query>            Search meetings by title, notes, or participant
   export <id> [--output DIR] Export meeting to markdown
+  folders                   List meeting folders
+  folder <id>               List meetings in a folder
 
 OPTIONS:
   --days N       Number of days to look back (default: 7)
+  --all          Show all meetings (no date limit)
   --transcript   Include full transcript in output
   --output DIR   Output directory for export (default: ./granola-exports)
   --help         Show this help message
 
 EXAMPLES:
   granola list --days 30
+  granola list --all
   granola show abc123 --transcript
   granola search "product review"
   granola export abc123 --output ./meetings
+  granola folders
 `;
 
 function parseArgs(args: string[]): {
@@ -62,17 +68,38 @@ function parseArgs(args: string[]): {
   return { command, positional, flags };
 }
 
-function listMeetings(cache: GranolaCache, days: number): void {
-  const docs = cache.getRecentDocuments(days);
+function listMeetings(
+  cache: GranolaCache,
+  days: number,
+  showAll: boolean
+): void {
+  const docs = showAll
+    ? cache
+        .getDocuments()
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+        )
+    : cache.getRecentDocuments(days);
 
   if (docs.length === 0) {
-    console.log(`No meetings found in the last ${days} days.`);
+    console.log(
+      showAll
+        ? "No meetings found."
+        : `No meetings found in the last ${days} days.`
+    );
     return;
   }
 
-  console.log(`## Recent Meetings (last ${days} days)\n`);
+  console.log(
+    showAll
+      ? `## All Meetings\n`
+      : `## Recent Meetings (last ${days} days)\n`
+  );
 
   for (const doc of docs) {
+    const title = getDisplayTitle(doc);
     const date = new Date(doc.created_at).toLocaleDateString();
     const time = new Date(doc.created_at).toLocaleTimeString([], {
       hour: "2-digit",
@@ -86,7 +113,7 @@ function listMeetings(cache: GranolaCache, days: number): void {
         .filter(Boolean)
         .join(", ") || "";
 
-    console.log(`- **${doc.title}**`);
+    console.log(`- **${title}**`);
     console.log(`  ID: \`${doc.id.slice(0, 8)}\` | ${date} ${time}`);
     if (attendees) {
       console.log(`  With: ${attendees}`);
@@ -145,8 +172,9 @@ function searchMeetings(cache: GranolaCache, query: string): void {
   console.log(`## Search Results for "${query}"\n`);
 
   for (const doc of results.slice(0, 20)) {
+    const title = getDisplayTitle(doc);
     const date = new Date(doc.created_at).toLocaleDateString();
-    console.log(`- **${doc.title}**`);
+    console.log(`- **${title}**`);
     console.log(`  ID: \`${doc.id.slice(0, 8)}\` | ${date}`);
     console.log("");
   }
@@ -188,6 +216,7 @@ function exportMeeting(
   }
 
   // Build markdown content
+  const title = getDisplayTitle(doc);
   const transcript = cache.getTranscript(doc.id);
   const attendees =
     doc.people?.attendees
@@ -196,12 +225,12 @@ function exportMeeting(
 
   const content = `---
 id: ${doc.id}
-title: "${doc.title.replace(/"/g, '\\"')}"
+title: "${title.replace(/"/g, '\\"')}"
 date: ${doc.created_at}
 participants: [${attendees.map((a) => `"${a}"`).join(", ")}]
 ---
 
-# ${doc.title}
+# ${title}
 
 **Date:** ${new Date(doc.created_at).toLocaleString()}
 **Participants:** ${attendees.join(", ") || "Unknown"}
@@ -217,7 +246,7 @@ ${formatTranscript(transcript)}
 `;
 
   const dateStr = new Date(doc.created_at).toISOString().split("T")[0];
-  const safeTitle = doc.title
+  const safeTitle = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 50);
@@ -226,6 +255,60 @@ ${formatTranscript(transcript)}
 
   writeFileSync(filepath, content);
   console.log(`Exported to: ${filepath}`);
+}
+
+function listFolders(cache: GranolaCache): void {
+  const folders = cache.getFolders();
+
+  if (folders.length === 0) {
+    console.log("No folders found.");
+    return;
+  }
+
+  console.log("## Meeting Folders\n");
+
+  for (const folder of folders) {
+    const count = folder.documentIds.length;
+    console.log(`- **${folder.metadata.title}**`);
+    console.log(
+      `  ID: \`${folder.metadata.id.slice(0, 8)}\` | ${count} meeting${count !== 1 ? "s" : ""}`
+    );
+    if (folder.metadata.description) {
+      console.log(`  ${folder.metadata.description}`);
+    }
+    console.log("");
+  }
+}
+
+function showFolder(cache: GranolaCache, id: string): void {
+  const folders = cache.getFolders();
+  const folder = folders.find(
+    (f) => f.metadata.id === id || f.metadata.id.startsWith(id)
+  );
+
+  if (!folder) {
+    console.error(`Folder not found: ${id}`);
+    process.exit(1);
+  }
+
+  const docs = cache.getFolderDocuments(folder.metadata.id);
+
+  console.log(`## ${folder.metadata.title}\n`);
+
+  if (docs.length === 0) {
+    console.log("No meetings in this folder.");
+    return;
+  }
+
+  for (const doc of docs) {
+    const title = getDisplayTitle(doc);
+    const date = new Date(doc.created_at).toLocaleDateString();
+    console.log(`- **${title}**`);
+    console.log(`  ID: \`${doc.id.slice(0, 8)}\` | ${date}`);
+    console.log("");
+  }
+
+  console.log(`\nTotal: ${docs.length} meetings`);
 }
 
 function main(): void {
@@ -247,7 +330,7 @@ function main(): void {
 
   switch (command) {
     case "list":
-      listMeetings(cache, parseInt(flags.days as string) || 7);
+      listMeetings(cache, parseInt(flags.days as string) || 7, !!flags.all);
       break;
 
     case "show":
@@ -276,6 +359,18 @@ function main(): void {
         positional[0],
         (flags.output as string) || "./granola-exports"
       );
+      break;
+
+    case "folders":
+      listFolders(cache);
+      break;
+
+    case "folder":
+      if (!positional[0]) {
+        console.error("Usage: granola folder <folder-id>");
+        process.exit(1);
+      }
+      showFolder(cache, positional[0]);
       break;
 
     default:

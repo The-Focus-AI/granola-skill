@@ -1,7 +1,7 @@
 ---
 name: Granola Meeting Notes
-description: This skill should be used when the user asks about "meeting notes", "what did we discuss", "find meeting", "show meeting", "recent meetings", "meeting transcript", "export meeting", "search meetings", "who was in the meeting", "yesterday's meeting", "last week's calls", or mentions Granola, meeting summaries, or wants to access meeting history. Provides access to Granola meeting notes, transcripts, and summaries.
-version: 0.1.0
+description: This skill should be used when the user asks about "meeting notes", "what did we discuss", "find meeting", "show meeting", "recent meetings", "meeting transcript", "export meeting", "search meetings", "who was in the meeting", "yesterday's meeting", "last week's calls", "meeting folders", or mentions Granola, meeting summaries, or wants to access meeting history. Provides access to Granola meeting notes, transcripts, and summaries.
+version: 0.3.0
 ---
 
 # Granola Meeting Notes
@@ -18,10 +18,10 @@ Access your Granola meeting notes, transcripts, and summaries directly from Clau
 ### List Recent Meetings
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/granola.js list [--days N]
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js list [--days N] [--all]
 ```
 
-Lists meetings from the last N days (default: 7).
+Lists meetings from the last N days (default: 7). Use `--all` to show all meetings.
 
 **Examples:**
 ```bash
@@ -30,6 +30,9 @@ ${CLAUDE_PLUGIN_ROOT}/bin/granola.js list
 
 # List last 30 days
 ${CLAUDE_PLUGIN_ROOT}/bin/granola.js list --days 30
+
+# List all meetings
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js list --all
 ```
 
 ### Show Meeting Details
@@ -55,7 +58,7 @@ ${CLAUDE_PLUGIN_ROOT}/bin/granola.js show 02b2432a --transcript
 ${CLAUDE_PLUGIN_ROOT}/bin/granola.js search <query>
 ```
 
-Search meetings by title, notes content, or participant names/emails.
+Search meetings by title, notes content, summary, overview, or participant names/emails.
 
 **Examples:**
 ```bash
@@ -81,6 +84,31 @@ ${CLAUDE_PLUGIN_ROOT}/bin/granola.js export 02b2432a
 
 # Export to specific directory
 ${CLAUDE_PLUGIN_ROOT}/bin/granola.js export 02b2432a --output ./meetings
+```
+
+### List Folders
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js folders
+```
+
+Lists all meeting folders with the number of meetings in each.
+
+### Show Folder Contents
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js folder <folder-id>
+```
+
+Lists all meetings in a specific folder. Use partial IDs.
+
+**Examples:**
+```bash
+# List folders first
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js folders
+
+# Show meetings in a folder
+${CLAUDE_PLUGIN_ROOT}/bin/granola.js folder a65b47fc
 ```
 
 ## Common Workflows
@@ -114,9 +142,10 @@ ${CLAUDE_PLUGIN_ROOT}/bin/granola.js export <id2> --output ./weekly-report
 ## Output Format
 
 - **List**: Markdown-formatted list with meeting title, ID, date, and participants
-- **Show**: Full markdown document with metadata, summary, notes, and optional transcript
+- **Show**: Full markdown document with metadata, summary, overview, notes, conferencing info, and optional transcript
 - **Search**: Condensed list of matching meetings
 - **Export**: Markdown file with YAML frontmatter for use in Obsidian, Notion, etc.
+- **Folders**: List of folders with meeting counts
 
 ## Limitations
 
