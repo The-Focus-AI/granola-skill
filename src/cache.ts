@@ -1,12 +1,34 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-// Cache file location
-const CACHE_PATH = join(
-  homedir(),
-  "Library/Application Support/Granola/cache-v4.json"
-);
+// Find the latest Granola cache file (cache-v4, cache-v5, cache-v6, etc.)
+function findCachePath(): string {
+  const granolaDir = join(
+    homedir(),
+    "Library/Application Support/Granola"
+  );
+  if (!existsSync(granolaDir)) {
+    throw new Error(
+      `Granola directory not found at ${granolaDir}. Is Granola installed?`
+    );
+  }
+  // Find all cache-vN.json files and pick the highest version
+  const files = readdirSync(granolaDir).filter((f) =>
+    /^cache-v\d+\.json$/.test(f)
+  );
+  if (files.length === 0) {
+    throw new Error(
+      `No Granola cache file found in ${granolaDir}. Is Granola installed?`
+    );
+  }
+  files.sort((a, b) => {
+    const vA = parseInt(a.match(/cache-v(\d+)/)?.[1] || "0");
+    const vB = parseInt(b.match(/cache-v(\d+)/)?.[1] || "0");
+    return vB - vA;
+  });
+  return join(granolaDir, files[0]);
+}
 
 // Decode HTML entities in strings from the cache
 function decodeHtmlEntities(str: string): string {
@@ -102,7 +124,7 @@ export class GranolaCache {
   private data: CacheData | null = null;
 
   constructor(customPath?: string) {
-    const cachePath = customPath || CACHE_PATH;
+    const cachePath = customPath || findCachePath();
 
     if (!existsSync(cachePath)) {
       throw new Error(
@@ -113,7 +135,7 @@ export class GranolaCache {
     const raw = readFileSync(cachePath, "utf-8");
     const outer = JSON.parse(raw);
 
-    // Handle double-JSON structure
+    // Handle both double-JSON (older versions) and direct object (v6+)
     if (typeof outer.cache === "string") {
       this.data = JSON.parse(outer.cache);
     } else {
